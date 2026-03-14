@@ -1,0 +1,43 @@
+### INPUT DATA
+biosamplesTable: "config/config_HCT116.tsv"
+
+### OUTPUT DATA
+results_dir: "results_HCT116/"
+
+### REFERENCE FILES
+ref:
+        chrom_sizes: "reference/hg38/GRCh38_EBV.no_alt.chrom.sizes.tsv"
+        regions_blocklist: "reference/hg38/GRCh38_unified_blacklist.bed"
+        ubiquitous_genes: "reference/UbiquitouslyExpressedGenes.txt"
+        genes: "reference/hg38/CollapsedGeneBounds.hg38.bed"
+        genome_tss: "reference/hg38/CollapsedGeneBounds.hg38.TSS500bp.bed"
+        qnorm: "reference/EnhancersQNormRef.K562.txt"
+        abc_thresholds: "reference/abc_thresholds.tsv"
+
+### RULE SPECIFIC PARAMS
+params_macs:
+        pval: 0.1
+        genome_size: hs
+        threads: 10
+
+params_candidate:
+        peakExtendFromSummit: 250
+        nStrongestPeaks: 200000
+
+params_neighborhoods:
+        use_qnorm: True
+
+params_predict:
+        flags: "--scale_hic_using_powerlaw"
+        hic_gamma: 1.024238616787792
+        hic_scale: 5.9594510043736655
+        hic_pseudocount_distance: 5000
+
+params_filter_predictions:
+        score_column: 'ABC.Score'
+        threshold: null
+        include_self_promoter: True
+        only_expressed_genes: False
+
+### INTERNAL USE ONLY
+ABC_DIR_PATH: ""
