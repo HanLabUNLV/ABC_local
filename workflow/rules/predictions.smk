@@ -31,7 +31,7 @@ rule create_predictions:
 		allPutative = os.path.join(RESULTS_DIR, "{biosample}", "Predictions", "EnhancerPredictionsAllPutative.tsv.gz"),
 		allPutativeNonExpressed = os.path.join(RESULTS_DIR, "{biosample}", "Predictions", "EnhancerPredictionsAllPutativeNonExpressedGenes.tsv.gz"),
 	resources:
-		tmpdir='/scratch/tmp',
+		tmpdir='/tmp',
 		mem_mb=partial(determine_mem_mb, min_gb=20)  # Use 100GB if using average HiC
 	shell:
 		"""

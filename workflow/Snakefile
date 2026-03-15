@@ -21,8 +21,9 @@ ABC_THRESHOLDS = load_abc_thresholds(config)
 include: "rules/macs2.smk"
 include: "rules/merge_peaks.smk"
 include: "rules/candidate_regions.smk"
-#include: "rules/neighborhoods.smk"
-#include: "rules/predictions.smk"
+include: "rules/merge_candidateRegions.smk"
+include: "rules/neighborhoods.smk"
+include: "rules/predictions.smk"
 #include: "rules/qc.smk"
 
 
@@ -30,6 +31,19 @@ rule all:
 	input:
 		candidateRegions = expand(
 			os.path.join(RESULTS_DIR, "{biosample}", "Peaks", "macs2_peaks.narrowPeak.sorted.candidateRegions.bed"),
+			biosample=BIOSAMPLES_CONFIG["biosample"]
+		),
+		mergedCandidateRegions = os.path.join(RESULTS_DIR, "global", "Peaks", "merged.candidateRegions.bed"),
+		enhList = expand(
+			os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "EnhancerList.txt"),
+			biosample=BIOSAMPLES_CONFIG["biosample"]
+		),
+		allPutative = expand(
+			os.path.join(RESULTS_DIR, "{biosample}", "Predictions", "EnhancerPredictionsAllPutative.tsv.gz"),
+			biosample=BIOSAMPLES_CONFIG["biosample"]
+		),
+		allPutativeNonExpressed = expand(
+			os.path.join(RESULTS_DIR, "{biosample}", "Predictions", "EnhancerPredictionsAllPutativeNonExpressedGenes.tsv.gz"),
 			biosample=BIOSAMPLES_CONFIG["biosample"]
 		),
 	resources:
