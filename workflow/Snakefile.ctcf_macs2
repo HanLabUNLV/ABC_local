@@ -1,0 +1,79 @@
+import os
+import glob
+from snakemake.utils import min_version
+min_version("7.0")
+
+ENCODE_DIR = "../ENCODE"
+RESULTS_DIR = "results_CTCF"
+CHROM_SIZES = "reference/hg38/GRCh38_EBV.no_alt.chrom.sizes.tsv"
+
+# Discover all CTCF ChIP-seq BAMs
+_bam_paths = glob.glob(os.path.join(ENCODE_DIR, "*_CTCF_ChIPseq_*.bam"))
+SAMPLES = [os.path.basename(p).replace(".bam", "") for p in _bam_paths]
+
+if not SAMPLES:
+    raise ValueError(f"No CTCF ChIP-seq BAMs found in {ENCODE_DIR}")
+
+
+rule all:
+    input:
+        expand(
+            os.path.join(RESULTS_DIR, "{sample}", "macs2_peaks.narrowPeak.sorted"),
+            sample=SAMPLES,
+        ),
+
+
+rule call_macs2_ctcf:
+    input:
+        bam = os.path.join(ENCODE_DIR, "{sample}.bam"),
+    params:
+        genome_size = "hs",
+        pval = 0.01,
+        outdir = os.path.join(RESULTS_DIR, "{sample}"),
+    conda:
+        "workflow/envs/abcenv.yml"
+    output:
+        narrowPeak = os.path.join(RESULTS_DIR, "{sample}", "macs2_peaks.narrowPeak"),
+    shell:
+        """
+        macs2 callpeak \
+            -f BAM \
+            -g {params.genome_size} \
+            -p {params.pval} \
+            -n macs2 \
+            --nomodel \
+            --extsize 200 \
+            --keep-dup all \
+            --call-summits \
+            --outdir {params.outdir} \
+            -t {input.bam}
+        """
+
+
+rule generate_chrom_sizes_bed:
+    input:
+        chrom_sizes = CHROM_SIZES,
+    output:
+        chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(CHROM_SIZES) + ".bed"),
+    shell:
+        """
+        awk 'BEGIN {{OFS="\t"}} {{if (NF > 0) print $1,"0",$2 ; else print $0}}' \
+            {input.chrom_sizes} > {output.chrom_sizes_bed}
+        """
+
+
+rule sort_narrowpeaks_ctcf:
+    input:
+        narrowPeak = os.path.join(RESULTS_DIR, "{sample}", "macs2_peaks.narrowPeak"),
+        chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(CHROM_SIZES) + ".bed"),
+    params:
+        chrom_sizes = CHROM_SIZES,
+    conda:
+        "workflow/envs/abcenv.yml"
+    output:
+        narrowPeakSorted = os.path.join(RESULTS_DIR, "{sample}", "macs2_peaks.narrowPeak.sorted"),
+    shell:
+        """
+        bedtools intersect -u -a {input.narrowPeak} -b {input.chrom_sizes_bed} | \
+        bedtools sort -faidx {params.chrom_sizes} -i stdin > {output.narrowPeakSorted}
+        """
