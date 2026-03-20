@@ -46,5 +46,9 @@ rule all:
 			os.path.join(RESULTS_DIR, "{biosample}", "Predictions", "EnhancerPredictionsAllPutativeNonExpressedGenes.tsv.gz"),
 			biosample=BIOSAMPLES_CONFIG["biosample"]
 		),
+		tssBins = expand(
+			os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "GeneTSSbins.txt"),
+			biosample=BIOSAMPLES_CONFIG["biosample"]
+		),
 	resources:
 		tmpdir='/tmp'

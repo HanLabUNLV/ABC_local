@@ -54,3 +54,42 @@ rule create_neighborhoods:
 			$([ -n "{params.supplementary_features}" ] && echo "--supplementary_features {params.supplementary_features}") \
 			{params.qnorm}
 		"""
+
+
+rule create_tss_bins:
+	input:
+		processed_genes = os.path.join(RESULTS_DIR, "{biosample}", "processed_genes_file.bed"),
+		chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(config['ref']['chrom_sizes']) + '.bed'),
+	params:
+		H3K4me1  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me1"]  or '' if "H3K4me1"  in BIOSAMPLES_CONFIG.columns else '',
+		H3K4me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me3"]  or '' if "H3K4me3"  in BIOSAMPLES_CONFIG.columns else '',
+		H3K9me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K9me3"]  or '' if "H3K9me3"  in BIOSAMPLES_CONFIG.columns else '',
+		H3K27me3 = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K27me3"] or '' if "H3K27me3" in BIOSAMPLES_CONFIG.columns else '',
+		H3K36me3 = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K36me3"] or '' if "H3K36me3" in BIOSAMPLES_CONFIG.columns else '',
+		chrom_sizes = config['ref']['chrom_sizes'],
+		outdir      = lambda wildcards: os.path.join(RESULTS_DIR, wildcards.biosample, "Neighborhoods"),
+		scripts_dir = SCRIPTS_DIR,
+	conda:
+		"../envs/abcenv.yml"
+	output:
+		tss_bins = os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "GeneTSSbins.txt"),
+	resources:
+		tmpdir = '/tmp',
+		mem_mb = 32*1000,
+	shell:
+		"""
+		for bam in $(echo "{params.H3K4me1},{params.H3K4me3},{params.H3K9me3},{params.H3K27me3},{params.H3K36me3}" | tr ',' ' '); do
+			[[ -z "${{bam}}" ]] || [[ -f "${{bam}}.bai" ]] || samtools index "${{bam}}"
+		done
+
+		python {params.scripts_dir}/run.tss_bins.py \
+			--genes {input.processed_genes} \
+			--outdir {params.outdir} \
+			--chrom_sizes {params.chrom_sizes} \
+			--chrom_sizes_bed {input.chrom_sizes_bed} \
+			$([ -n "{params.H3K4me1}"  ] && echo "--H3K4me1 {params.H3K4me1}")  \
+			$([ -n "{params.H3K4me3}"  ] && echo "--H3K4me3 {params.H3K4me3}")  \
+			$([ -n "{params.H3K9me3}"  ] && echo "--H3K9me3 {params.H3K9me3}")  \
+			$([ -n "{params.H3K27me3}" ] && echo "--H3K27me3 {params.H3K27me3}") \
+			$([ -n "{params.H3K36me3}" ] && echo "--H3K36me3 {params.H3K36me3}")
+		"""

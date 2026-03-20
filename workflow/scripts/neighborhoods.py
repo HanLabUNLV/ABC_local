@@ -171,6 +171,127 @@ def annotate_genes_with_features(
     return merged
 
 
+def make_tss_bins_file(genes, outdir, genome_sizes, chrom_sizes_map, bin_size=128, slop=10240):
+    """
+    Create a strand-aware BED file of fixed-size bins over +/-slop bp from each gene's TSS.
+    Bin 1 is always furthest upstream relative to the direction of transcription:
+      + strand: bin 1 = [TSS-slop, TSS-slop+bin_size], bin N = [TSS+slop-bin_size, TSS+slop]
+      - strand: bin 1 = [TSS+slop-bin_size, TSS+slop], bin N = [TSS-slop, TSS-slop+bin_size]
+    Name column: {Ensembl_ID}_{symbol}_{bin_num}  (matches DeepDiffChrome convention)
+    Returns: (bins_df sorted to match BED file order, path to BED file)
+    """
+    n_bins = (2 * slop) // bin_size  # e.g. 160 for slop=10240, bin_size=128
+
+    rows = []
+    for _, gene in genes.iterrows():
+        tss = int(gene["tss"])
+        chrom = str(gene["chr"])
+        strand = gene["strand"]
+        ensembl_id = gene["Ensembl_ID"]
+        symbol = gene["name"]
+        chrom_size = int(chrom_sizes_map.get(chrom, 2**31))
+
+        for i in range(n_bins):
+            bin_start = max(0, tss - slop + i * bin_size)
+            bin_end = min(chrom_size, tss - slop + (i + 1) * bin_size)
+            if bin_start >= bin_end:
+                continue
+            bin_num = (i + 1) if strand == "+" else (n_bins - i)
+            rows.append([chrom, bin_start, bin_end,
+                         f"{ensembl_id}_{symbol}_{bin_num}", 0, strand])
+
+    bins_df = pd.DataFrame(rows, columns=["chr", "start", "end", "name", "score", "strand"])
+    bins_bed_file = os.path.join(outdir, "GeneList.TSS10kb.bins.bed")
+    bins_df.to_csv(bins_bed_file, sep="\t", header=False, index=False)
+
+    sort_command = (
+        "bedtools sort -faidx {genome_sizes} -i {bins_bed_file} "
+        "> {bins_bed_file}.sorted && mv {bins_bed_file}.sorted {bins_bed_file}"
+    ).format(**locals())
+    run_command(sort_command)
+
+    # Re-read sorted file so bins_df row order matches the counting output order
+    bins_df = pd.read_table(
+        bins_bed_file, header=None,
+        names=["chr", "start", "end", "name", "score", "strand"]
+    )
+    return bins_df, bins_bed_file
+
+
+def count_tss_bins(
+    genes,
+    genome_sizes,
+    genome_sizes_bed,
+    chrom_sizes_map,
+    features,
+    outdir,
+    bin_size=128,
+    slop=10240,
+    use_fast_count=True,
+):
+    """
+    Count histone mark signal in strand-aware bins over +/-slop bp from each TSS.
+
+    Uses existing run_count_reads / count_total functions.  Counts are joined back
+    to the bins DataFrame positionally (run_count_reads preserves input BED row order),
+    so no chr/start/end collision issues.
+
+    Output: GeneTSSbins.txt with columns:
+        geneID_window | {mark}.{bam}.readCount | {mark}.{bam}.RPM | ... | {mark}.RPM
+    """
+    filebase = "GeneTSSbins"
+
+    bins_df, bins_bed_file = make_tss_bins_file(
+        genes, outdir, genome_sizes, chrom_sizes_map,
+        bin_size=bin_size, slop=slop
+    )
+
+    result_df = bins_df[["name"]].copy().rename(columns={"name": "geneID_window"})
+
+    for mark, bam_list in features.items():
+        if isinstance(bam_list, str):
+            bam_list = [bam_list]
+
+        rpm_cols = []
+        for bam in bam_list:
+            bam_basename = os.path.basename(bam)
+            feature_name = f"{mark}.{bam_basename}"
+            count_outfile = os.path.join(
+                outdir, f"{filebase}.{feature_name}.CountReads.bedgraph"
+            )
+
+            print(f"Counting {feature_name} over TSS bins ...", flush=True)
+            run_count_reads(
+                bam, count_outfile, bins_bed_file,
+                genome_sizes, genome_sizes_bed, use_fast_count
+            )
+
+            # Positional alignment: run_count_reads preserves input BED row order
+            counts = pd.read_table(
+                count_outfile, header=None,
+                names=["chr", "start", "end", "count"]
+            )
+            assert len(counts) == len(bins_df), (
+                f"Count output length {len(counts)} != bins length {len(bins_df)} "
+                f"for {feature_name}"
+            )
+
+            total = count_total(bam)
+            result_df[f"{feature_name}.readCount"] = counts["count"].values
+            result_df[f"{feature_name}.RPM"] = (
+                1e6 * counts["count"].values / float(total)
+            )
+            rpm_cols.append(f"{feature_name}.RPM")
+
+        # Average RPM across replicates -- mirrors average_features convention
+        result_df[f"{mark}.RPM"] = result_df[rpm_cols].mean(axis=1)
+
+    out_path = os.path.join(outdir, "GeneTSSbins.txt")
+    result_df.to_csv(out_path, sep="\t", index=False, float_format="%.6f")
+    print(f"Written: {out_path}", flush=True)
+    return result_df
+
+
 def make_tss_region_file(genes, outdir, sizes, chrom_sizes_map, tss_slop=500):
     # Given a gene file, define 1kb regions around the tss of each gene
 
