@@ -228,6 +228,7 @@ def count_tss_bins(
     bin_size=128,
     slop=10240,
     use_fast_count=True,
+    qnorm_reference=None,
 ):
     """
     Count histone mark signal in strand-aware bins over +/-slop bp from each TSS.
@@ -286,9 +287,54 @@ def count_tss_bins(
         # Average RPM across replicates -- mirrors average_features convention
         result_df[f"{mark}.RPM"] = result_df[rpm_cols].mean(axis=1)
 
+    if qnorm_reference is not None:
+        result_df = apply_tss_bins_qnorm(result_df, qnorm_reference)
+
     out_path = os.path.join(outdir, "GeneTSSbins.txt")
     result_df.to_csv(out_path, sep="\t", index=False, float_format="%.6f")
     print(f"Written: {out_path}", flush=True)
+    return result_df
+
+
+def apply_tss_bins_qnorm(result_df, qnorm_reference_path):
+    """
+    Quantile-normalize per-mark RPM columns in a GeneTSSbins DataFrame against a
+    prebuilt reference (produced by build_tss_bins_qnorm_ref.py).
+
+    For each mark present in both result_df and the reference, adds a
+    '{mark}.normalized_RPM' column obtained by rank-interpolating the sample's
+    RPM values onto the reference distribution.
+    """
+    ref = pd.read_csv(qnorm_reference_path, sep="\t")
+    mark_cols = [c for c in ref.columns if c.endswith(".RPM") and c != "rank"]
+
+    n_total = len(result_df)
+
+    for col in mark_cols:
+        if col not in result_df.columns:
+            continue
+        norm_col = col.replace(".RPM", ".normalized_RPM")
+
+        # Rank each bin's RPM within the sample (average ties)
+        sample_quantile = result_df[col].rank(method="average") / n_total
+
+        # Map sample quantile reference RPM via reverse-rank interpolation
+        # (mirrors run_qnorm rank method: x-axis is (1-quantile)*n_ref)
+        n_ref = n_total  # treat sample size as n_ref for rank scaling
+        interpfunc = interpolate.interp1d(
+            ref["rank"],
+            ref[col],
+            kind="linear",
+            fill_value="extrapolate",
+        )
+        result_df[norm_col] = interpfunc(
+            (1 - sample_quantile) * n_ref
+        ).clip(0)
+
+    print(
+        f"Quantile normalization applied using reference: {qnorm_reference_path}",
+        flush=True,
+    )
     return result_df
 
 

@@ -4,10 +4,10 @@ import subprocess
 
 import pandas as pd
 
-from neighborhoods import count_tss_bins, read_gene_bed_file, process_gene_bed
+from neighborhoods import apply_tss_bins_qnorm, count_tss_bins, read_gene_bed_file, process_gene_bed
 
 
-MARKS = ["H3K4me1", "H3K4me3", "H3K9me3", "H3K27me3", "H3K36me3"]
+MARKS = ["H3K4me1", "H3K4me3", "H3K9me3", "H3K27ac", "H3K27me3", "H3K36me3"]
 
 
 def parseargs():
@@ -56,6 +56,17 @@ def parseargs():
         "--use_secondary_counting_method", action="store_true",
         help="Use slower secondary counting method (passed to count_bam)",
     )
+    parser.add_argument(
+        "--qnorm_reference", default=None,
+        help="Path to a TSS-bins quantile-normalization reference file "
+             "(built with build_tss_bins_qnorm_ref.py). When provided, adds "
+             "'{mark}.normalized_RPM' columns to GeneTSSbins.txt.",
+    )
+    parser.add_argument(
+        "--skip_counting", action="store_true",
+        help="Skip BAM counting and apply --qnorm_reference directly to an "
+             "existing GeneTSSbins.txt in --outdir. Requires --qnorm_reference.",
+    )
 
     for mark in MARKS:
         parser.add_argument(
@@ -88,6 +99,19 @@ def main():
     args = parseargs()
     os.makedirs(args.outdir, exist_ok=True)
 
+    if args.skip_counting:
+        if not args.qnorm_reference:
+            raise ValueError("--skip_counting requires --qnorm_reference.")
+        existing = os.path.join(args.outdir, "GeneTSSbins.txt")
+        if not os.path.exists(existing):
+            raise FileNotFoundError(f"--skip_counting set but {existing} not found.")
+        print(f"Skipping BAM counting; reading {existing}", flush=True)
+        result_df = pd.read_csv(existing, sep="\t")
+        result_df = apply_tss_bins_qnorm(result_df, args.qnorm_reference)
+        result_df.to_csv(existing, sep="\t", index=False, float_format="%.6f")
+        print(f"Updated: {existing}", flush=True)
+        return
+
     features = get_features(args)
     if not features:
         raise ValueError("At least one histone mark BAM must be provided.")
@@ -118,6 +142,7 @@ def main():
         bin_size=args.bin_size,
         slop=args.slop,
         use_fast_count=(not args.use_secondary_counting_method),
+        qnorm_reference=args.qnorm_reference,
     )
 
     print("TSS bin counting complete.", flush=True)
