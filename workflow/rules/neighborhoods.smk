@@ -1,7 +1,8 @@
 rule create_neighborhoods:
 	input:
 		candidateRegions = os.path.join(RESULTS_DIR, "global", "Peaks", "merged.candidateRegions.bed"),
-		chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(config['ref']['chrom_sizes']) + '.bed')
+		chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(config['ref']['chrom_sizes']) + '.bed'),
+		qnorm_ref = lambda wildcards: config['ref']['qnorm'] if (config['params_neighborhoods']['use_qnorm'] and wildcards.biosample != config.get('enhancer_qnorm_ref_sample', 'GM12878')) else [],
 	params:
 		DHS = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "DHS"] or '',
 		ATAC = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "ATAC"] or '',
@@ -16,7 +17,7 @@ rule create_neighborhoods:
 		genes = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, 'genes'],
 		ubiquitous_genes = config['ref']['ubiquitous_genes'],
 		chrom_sizes = config['ref']['chrom_sizes'],
-		qnorm = f"--qnorm {config['ref']['qnorm']}" if config['params_neighborhoods']['use_qnorm'] else "",
+		qnorm = lambda wildcards, input: f"--qnorm {input.qnorm_ref}" if input.qnorm_ref else "",
 		scripts_dir = SCRIPTS_DIR
 	conda:
 		"../envs/abcenv.yml"
@@ -56,10 +57,37 @@ rule create_neighborhoods:
 		"""
 
 
+rule build_tss_bins_qnorm_ref:
+	input:
+		tss_bins = os.path.join(RESULTS_DIR, config.get('tss_bins_qnorm_ref_sample', 'GM12878'), "Neighborhoods", "GeneTSSbins.txt"),
+	params:
+		scripts_dir = SCRIPTS_DIR,
+	output:
+		ref = config.get('tss_bins_qnorm_reference', 'reference/TSSbinsQNormRef.GM12878.txt'),
+	conda:
+		"../envs/abcenv.yml"
+	shell:
+		"python {params.scripts_dir}/build_tss_bins_qnorm_ref.py --tss_bins {input.tss_bins} --outfile {output.ref}"
+
+
+rule build_enhancer_qnorm_ref:
+	input:
+		enhancer_list = os.path.join(RESULTS_DIR, config.get('enhancer_qnorm_ref_sample', 'GM12878'), "Neighborhoods", "EnhancerList.txt"),
+	params:
+		scripts_dir = SCRIPTS_DIR,
+	output:
+		ref = config.get('enhancer_qnorm_reference', 'reference/EnhancerQNormRef.GM12878.txt'),
+	conda:
+		"../envs/abcenv.yml"
+	shell:
+		"python {params.scripts_dir}/build_enhancer_qnorm_ref.py --enhancer_list {input.enhancer_list} --outfile {output.ref}"
+
+
 rule create_tss_bins:
 	input:
 		processed_genes = os.path.join(RESULTS_DIR, "{biosample}", "processed_genes_file.bed"),
 		chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(config['ref']['chrom_sizes']) + '.bed'),
+		qnorm_ref = lambda wildcards: config.get('tss_bins_qnorm_reference', '') if (config.get('tss_bins_qnorm_reference', '') and wildcards.biosample != config.get('tss_bins_qnorm_ref_sample', 'GM12878')) else [],
 	params:
 		H3K4me1  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me1"]  or '' if "H3K4me1"  in BIOSAMPLES_CONFIG.columns else '',
 		H3K4me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me3"]  or '' if "H3K4me3"  in BIOSAMPLES_CONFIG.columns else '',
@@ -70,7 +98,7 @@ rule create_tss_bins:
 		chrom_sizes    = config['ref']['chrom_sizes'],
 		outdir         = lambda wildcards: os.path.join(RESULTS_DIR, wildcards.biosample, "Neighborhoods"),
 		scripts_dir    = SCRIPTS_DIR,
-		qnorm_reference = config.get('tss_bins_qnorm_reference', ''),
+		qnorm_reference = lambda wildcards, input: input.qnorm_ref if input.qnorm_ref else '',
 	conda:
 		"../envs/abcenv.yml"
 	output:

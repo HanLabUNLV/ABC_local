@@ -50,5 +50,7 @@ rule all:
 			os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "GeneTSSbins.txt"),
 			biosample=BIOSAMPLES_CONFIG["biosample"]
 		),
+		enhancerQNormRef = config.get('enhancer_qnorm_reference', 'reference/EnhancerQNormRef.GM12878.txt'),
+		tssBinsQNormRef = config.get('tss_bins_qnorm_reference', 'reference/TSSbinsQNormRef.GM12878.txt'),
 	resources:
 		tmpdir='/tmp'

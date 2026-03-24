@@ -1,5 +1,5 @@
 ### INPUT DATA
-biosamplesTable: "config/config_HCT116.tsv"
+biosamplesTable: "config/config_HCT116_all_chromatin.tsv"
 
 ### OUTPUT DATA
 results_dir: "results_HCT116/"
@@ -11,7 +11,7 @@ ref:
         ubiquitous_genes: "reference/UbiquitouslyExpressedGenes.txt"
         genes: "reference/hg38/CollapsedGeneBounds.hg38.bed"
         genome_tss: "reference/hg38/CollapsedGeneBounds.hg38.TSS500bp.bed"
-        qnorm: "reference/EnhancersQNormRef.K562.txt"
+        qnorm: "reference/EnhancerQNormRef.HCT116.txt"
         abc_thresholds: "reference/abc_thresholds.tsv"
 
 ### RULE SPECIFIC PARAMS
@@ -38,6 +38,11 @@ params_filter_predictions:
         threshold: null
         include_self_promoter: True
         only_expressed_genes: False
+
+enhancer_qnorm_ref_sample: 'HCT116'
+enhancer_qnorm_reference: 'reference/EnhancerQNormRef.HCT116.txt'
+tss_bins_qnorm_ref_sample: 'HCT116'
+tss_bins_qnorm_reference: 'reference/TSSbinsQNormRef.HCT116.txt'
 
 ### INTERNAL USE ONLY
 ABC_DIR_PATH: ""

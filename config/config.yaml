@@ -18,7 +18,7 @@ ref:
         ubiquitous_genes: "reference/UbiquitouslyExpressedGenes.txt"
         genes: "reference/hg38/CollapsedGeneBounds.hg38.bed"
         genome_tss: "reference/hg38/CollapsedGeneBounds.hg38.TSS500bp.bed"
-        qnorm: "reference/EnhancersQNormRef.K562.txt"
+        qnorm: "reference/EnhancerQNormRef.GM12878.txt"
         abc_thresholds: "reference/abc_thresholds.tsv"
 
 ### RULE SPECIFIC PARAMS
@@ -51,6 +51,11 @@ params_filter_predictions:
         include_self_promoter: True
         only_expressed_genes: False
 
+
+enhancer_qnorm_ref_sample: 'GM12878'
+enhancer_qnorm_reference: 'reference/EnhancerQNormRef.GM12878.txt'
+tss_bins_qnorm_ref_sample: 'GM12878'
+tss_bins_qnorm_reference: 'reference/TSSbinsQNormRef.GM12878.txt'
 
 ### INTERNAL USE ONLY
 
