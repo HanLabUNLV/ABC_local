@@ -25,7 +25,7 @@ params_candidate:
         nStrongestPeaks: 200000
 
 params_neighborhoods:
-        use_qnorm: True
+        use_qnorm: False
 
 params_predict:
         flags: "--scale_hic_using_powerlaw"
@@ -39,10 +39,6 @@ params_filter_predictions:
         include_self_promoter: True
         only_expressed_genes: False
 
-enhancer_qnorm_ref_sample: 'HCT116'
-enhancer_qnorm_reference: 'reference/EnhancerQNormRef.HCT116.txt'
-tss_bins_qnorm_ref_sample: 'HCT116'
-tss_bins_qnorm_reference: 'reference/TSSbinsQNormRef.HCT116.txt'
 
 ### INTERNAL USE ONLY
 ABC_DIR_PATH: ""

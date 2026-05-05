@@ -34,9 +34,7 @@ params_candidate:
 
 # These parameters are used to run the Run Neighborhoods portion of the abc code
 params_neighborhoods:
-        # Recommended to keep as True. Setting to False leads will result in 
-        # different ABC scores that don't follow the pre-set ABC thresholds
-        use_qnorm: True  
+        use_qnorm: False
         
 # These parameters are used to run the Predictions portion of the abc code
 params_predict:

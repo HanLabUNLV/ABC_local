@@ -287,6 +287,13 @@ def count_tss_bins(
         # Average RPM across replicates -- mirrors average_features convention
         result_df[f"{mark}.RPM"] = result_df[rpm_cols].mean(axis=1)
 
+    # Pad edge genes (near chromosome boundaries) to exactly n_bins rows.
+    # Bins that extend beyond the chromosome are skipped in make_tss_bins_file,
+    # leaving those genes with fewer than n_bins rows. Zero-fill the missing bins
+    # so GeneTSSbins.txt always has exactly n_bins rows per gene.
+    n_bins = (2 * slop) // bin_size
+    result_df = _pad_tss_bins_to_full(result_df, n_bins)
+
     if qnorm_reference is not None:
         result_df = apply_tss_bins_qnorm(result_df, qnorm_reference)
 
@@ -294,6 +301,56 @@ def count_tss_bins(
     result_df.to_csv(out_path, sep="\t", index=False, float_format="%.6f")
     print(f"Written: {out_path}", flush=True)
     return result_df
+
+
+def _pad_bins_to_full(result_df, n_bins, id_col="geneID_window"):
+    """Pad entries with fewer than n_bins rows to the full count with zeros.
+
+    id_col format: {prefix}_{bin_num}  (bin_num is the last '_'-delimited field)
+    Prefix (everything before the last '_') is the grouping key.
+    Missing bin numbers get a new row with 0.0 for all numeric columns.
+    Output is sorted by prefix then bin number.
+    """
+    split  = result_df[id_col].str.rsplit("_", n=1)
+    prefix = split.str[0]
+    bin_num = split.str[1].astype(int)
+
+    result_df = result_df.copy()
+    result_df["_group"] = prefix
+    result_df["_bin"]   = bin_num
+
+    counts     = result_df.groupby("_group")["_bin"].count()
+    incomplete = counts[counts < n_bins].index
+
+    if len(incomplete) > 0:
+        entity = "genes" if id_col == "geneID_window" else "enhancers"
+        print(f"  Padding {len(incomplete)} edge {entity} to {n_bins} bins with zeros",
+              flush=True)
+
+        zero_vals = {col: 0.0 for col in result_df.columns
+                     if col not in (id_col, "_group", "_bin")}
+        pad_rows  = []
+        for grp in incomplete:
+            existing = set(result_df.loc[result_df["_group"] == grp, "_bin"])
+            for b in range(1, n_bins + 1):
+                if b not in existing:
+                    row = {id_col: f"{grp}_{b}", "_group": grp, "_bin": b}
+                    row.update(zero_vals)
+                    pad_rows.append(row)
+
+        result_df = pd.concat(
+            [result_df, pd.DataFrame(pad_rows)], ignore_index=True
+        )
+
+    result_df = (result_df
+                 .sort_values(["_group", "_bin"])
+                 .drop(columns=["_group", "_bin"])
+                 .reset_index(drop=True))
+    return result_df
+
+
+def _pad_tss_bins_to_full(result_df, n_bins):
+    return _pad_bins_to_full(result_df, n_bins, id_col="geneID_window")
 
 
 def apply_tss_bins_qnorm(result_df, qnorm_reference_path):
@@ -335,6 +392,121 @@ def apply_tss_bins_qnorm(result_df, qnorm_reference_path):
         f"Quantile normalization applied using reference: {qnorm_reference_path}",
         flush=True,
     )
+    return result_df
+
+
+def make_enhancer_bins_file(enhancers, outdir, genome_sizes, chrom_sizes_map, bin_size=128, slop=10240):
+    """
+    Create a BED file of fixed-size bins centered on each enhancer's midpoint.
+    Bins are numbered left-to-right (bin 1 = leftmost, no strand-awareness).
+    Name column: {enhancer_name}_{bin_num}
+    Returns: (bins_df sorted to match BED file order, path to BED file)
+    """
+    n_bins = (2 * slop) // bin_size
+
+    rows = []
+    for _, enh in enhancers.iterrows():
+        chrom = str(enh["chr"])
+        center = (int(enh["start"]) + int(enh["end"])) // 2
+        enh_name = str(enh["name"])
+        chrom_size = int(chrom_sizes_map.get(chrom, 2**31))
+
+        for i in range(n_bins):
+            bin_start = max(0, center - slop + i * bin_size)
+            bin_end = min(chrom_size, center - slop + (i + 1) * bin_size)
+            if bin_start >= bin_end:
+                continue
+            rows.append([chrom, bin_start, bin_end, f"{enh_name}_{i + 1}", 0, "."])
+
+    bins_df = pd.DataFrame(rows, columns=["chr", "start", "end", "name", "score", "strand"])
+    bins_bed_file = os.path.join(outdir, "EnhancerList.center.bins.bed")
+    bins_df.to_csv(bins_bed_file, sep="\t", header=False, index=False)
+
+    sort_command = (
+        "bedtools sort -faidx {genome_sizes} -i {bins_bed_file} "
+        "> {bins_bed_file}.sorted && mv {bins_bed_file}.sorted {bins_bed_file}"
+    ).format(**locals())
+    run_command(sort_command)
+
+    bins_df = pd.read_table(
+        bins_bed_file, header=None,
+        names=["chr", "start", "end", "name", "score", "strand"]
+    )
+    return bins_df, bins_bed_file
+
+
+def count_enhancer_bins(
+    enhancers,
+    genome_sizes,
+    genome_sizes_bed,
+    chrom_sizes_map,
+    features,
+    outdir,
+    bin_size=128,
+    slop=10240,
+    use_fast_count=True,
+    qnorm_reference=None,
+):
+    """
+    Count histone mark signal in bins centered on each enhancer's midpoint.
+
+    Output: EnhancerBins.txt with columns:
+        enhID_window | {mark}.{bam}.readCount | {mark}.{bam}.RPM | ... | {mark}.RPM
+    """
+    filebase = "EnhancerBins"
+
+    bins_df, bins_bed_file = make_enhancer_bins_file(
+        enhancers, outdir, genome_sizes, chrom_sizes_map,
+        bin_size=bin_size, slop=slop
+    )
+
+    result_df = bins_df[["name"]].copy().rename(columns={"name": "enhID_window"})
+
+    for mark, bam_list in features.items():
+        if isinstance(bam_list, str):
+            bam_list = [bam_list]
+
+        rpm_cols = []
+        for bam in bam_list:
+            bam_basename = os.path.basename(bam)
+            feature_name = f"{mark}.{bam_basename}"
+            count_outfile = os.path.join(
+                outdir, f"{filebase}.{feature_name}.CountReads.bedgraph"
+            )
+
+            print(f"Counting {feature_name} over enhancer bins ...", flush=True)
+            run_count_reads(
+                bam, count_outfile, bins_bed_file,
+                genome_sizes, genome_sizes_bed, use_fast_count
+            )
+
+            counts = pd.read_table(
+                count_outfile, header=None,
+                names=["chr", "start", "end", "count"]
+            )
+            assert len(counts) == len(bins_df), (
+                f"Count output length {len(counts)} != bins length {len(bins_df)} "
+                f"for {feature_name}"
+            )
+
+            total = count_total(bam)
+            result_df[f"{feature_name}.readCount"] = counts["count"].values
+            result_df[f"{feature_name}.RPM"] = (
+                1e6 * counts["count"].values / float(total)
+            )
+            rpm_cols.append(f"{feature_name}.RPM")
+
+        result_df[f"{mark}.RPM"] = result_df[rpm_cols].mean(axis=1)
+
+    n_bins = (2 * slop) // bin_size
+    result_df = _pad_bins_to_full(result_df, n_bins, id_col="enhID_window")
+
+    if qnorm_reference is not None:
+        result_df = apply_tss_bins_qnorm(result_df, qnorm_reference)
+
+    out_path = os.path.join(outdir, "EnhancerBins.txt")
+    result_df.to_csv(out_path, sep="\t", index=False, float_format="%.6f")
+    print(f"Written: {out_path}", flush=True)
     return result_df
 
 

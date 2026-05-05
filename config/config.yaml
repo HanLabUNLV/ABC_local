@@ -34,9 +34,7 @@ params_candidate:
 
 # These parameters are used to run the Run Neighborhoods portion of the abc code
 params_neighborhoods:
-        # Recommended to keep as True. Setting to False leads will result in 
-        # different ABC scores that don't follow the pre-set ABC thresholds
-        use_qnorm: True  
+        use_qnorm: False
         
 # These parameters are used to run the Predictions portion of the abc code
 params_predict:
@@ -52,10 +50,6 @@ params_filter_predictions:
         only_expressed_genes: False
 
 
-enhancer_qnorm_ref_sample: 'GM12878'
-enhancer_qnorm_reference: 'reference/EnhancerQNormRef.GM12878.txt'
-tss_bins_qnorm_ref_sample: 'GM12878'
-tss_bins_qnorm_reference: 'reference/TSSbinsQNormRef.GM12878.txt'
 
 ### INTERNAL USE ONLY
 
