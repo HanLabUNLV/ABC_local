@@ -16,13 +16,13 @@ rule create_neighborhoods:
 		genes = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, 'genes'],
 		ubiquitous_genes = config['ref']['ubiquitous_genes'],
 		chrom_sizes = config['ref']['chrom_sizes'],
-		scripts_dir = SCRIPTS_DIR
+		scripts_dir = SCRIPTS_DIR,
+		neighborhoodDirectory = lambda wildcards: os.path.join(RESULTS_DIR, wildcards.biosample, "Neighborhoods"),
 	conda:
 		"../envs/abcenv.yml"
 	output:
 		enhList = os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "EnhancerList.txt"),
 		geneList = os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "GeneList.txt"),
-		neighborhoodDirectory = directory(os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods")),
 		processed_genes_file = os.path.join(RESULTS_DIR, "{biosample}", "processed_genes_file.bed"),
 	resources:
 		tmpdir='/tmp',
@@ -46,7 +46,7 @@ rule create_neighborhoods:
 			--default_accessibility_feature {params.default} \
 			--chrom_sizes {params.chrom_sizes} \
 			--chrom_sizes_bed {input.chrom_sizes_bed} \
-			--outdir {output.neighborhoodDirectory} \
+			--outdir {params.neighborhoodDirectory} \
 			--genes {output.processed_genes_file} \
 			--ubiquitously_expressed_genes {params.ubiquitous_genes} \
 			--H3K27ac {params.H3K27ac} \
@@ -59,6 +59,7 @@ rule create_enhancer_bins:
 		enhancer_list = os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "EnhancerList.txt"),
 		chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(config['ref']['chrom_sizes']) + '.bed'),
 	params:
+		DHS      = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "DHS"]      or '' if "DHS"      in BIOSAMPLES_CONFIG.columns else '',
 		H3K4me1  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me1"]  or '' if "H3K4me1"  in BIOSAMPLES_CONFIG.columns else '',
 		H3K4me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me3"]  or '' if "H3K4me3"  in BIOSAMPLES_CONFIG.columns else '',
 		H3K9me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K9me3"]  or '' if "H3K9me3"  in BIOSAMPLES_CONFIG.columns else '',
@@ -77,7 +78,7 @@ rule create_enhancer_bins:
 		mem_mb = 32*1000,
 	shell:
 		"""
-		for bam in $(echo "{params.H3K4me1},{params.H3K4me3},{params.H3K9me3},{params.H3K27ac},{params.H3K27me3},{params.H3K36me3}" | tr ',' ' '); do
+		for bam in $(echo "{params.DHS},{params.H3K4me1},{params.H3K4me3},{params.H3K9me3},{params.H3K27ac},{params.H3K27me3},{params.H3K36me3}" | tr ',' ' '); do
 			[[ -z "${{bam}}" ]] || [[ -f "${{bam}}.bai" ]] || samtools index "${{bam}}"
 		done
 
@@ -86,6 +87,7 @@ rule create_enhancer_bins:
 			--outdir {params.outdir} \
 			--chrom_sizes {params.chrom_sizes} \
 			--chrom_sizes_bed {input.chrom_sizes_bed} \
+			$([ -n "{params.DHS}"      ] && echo "--DHS {params.DHS}")          \
 			$([ -n "{params.H3K4me1}"  ] && echo "--H3K4me1 {params.H3K4me1}")  \
 			$([ -n "{params.H3K4me3}"  ] && echo "--H3K4me3 {params.H3K4me3}")  \
 			$([ -n "{params.H3K9me3}"  ] && echo "--H3K9me3 {params.H3K9me3}")  \
@@ -100,6 +102,7 @@ rule create_tss_bins:
 		processed_genes = os.path.join(RESULTS_DIR, "{biosample}", "processed_genes_file.bed"),
 		chrom_sizes_bed = os.path.join(RESULTS_DIR, "tmp", os.path.basename(config['ref']['chrom_sizes']) + '.bed'),
 	params:
+		DHS      = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "DHS"]      or '' if "DHS"      in BIOSAMPLES_CONFIG.columns else '',
 		H3K4me1  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me1"]  or '' if "H3K4me1"  in BIOSAMPLES_CONFIG.columns else '',
 		H3K4me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K4me3"]  or '' if "H3K4me3"  in BIOSAMPLES_CONFIG.columns else '',
 		H3K9me3  = lambda wildcards: BIOSAMPLES_CONFIG.loc[wildcards.biosample, "H3K9me3"]  or '' if "H3K9me3"  in BIOSAMPLES_CONFIG.columns else '',
@@ -118,7 +121,7 @@ rule create_tss_bins:
 		mem_mb = 32*1000,
 	shell:
 		"""
-		for bam in $(echo "{params.H3K4me1},{params.H3K4me3},{params.H3K9me3},{params.H3K27ac},{params.H3K27me3},{params.H3K36me3}" | tr ',' ' '); do
+		for bam in $(echo "{params.DHS},{params.H3K4me1},{params.H3K4me3},{params.H3K9me3},{params.H3K27ac},{params.H3K27me3},{params.H3K36me3}" | tr ',' ' '); do
 			[[ -z "${{bam}}" ]] || [[ -f "${{bam}}.bai" ]] || samtools index "${{bam}}"
 		done
 
@@ -127,6 +130,7 @@ rule create_tss_bins:
 			--outdir {params.outdir} \
 			--chrom_sizes {params.chrom_sizes} \
 			--chrom_sizes_bed {input.chrom_sizes_bed} \
+			$([ -n "{params.DHS}"      ] && echo "--DHS {params.DHS}")          \
 			$([ -n "{params.H3K4me1}"  ] && echo "--H3K4me1 {params.H3K4me1}")  \
 			$([ -n "{params.H3K4me3}"  ] && echo "--H3K4me3 {params.H3K4me3}")  \
 			$([ -n "{params.H3K9me3}"  ] && echo "--H3K9me3 {params.H3K9me3}")  \

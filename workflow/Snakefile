@@ -50,5 +50,9 @@ rule all:
 			os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "GeneTSSbins.txt"),
 			biosample=BIOSAMPLES_CONFIG["biosample"]
 		),
+		enhBins = expand(
+			os.path.join(RESULTS_DIR, "{biosample}", "Neighborhoods", "EnhancerBins.txt"),
+			biosample=BIOSAMPLES_CONFIG["biosample"]
+		),
 	resources:
 		tmpdir='/tmp'

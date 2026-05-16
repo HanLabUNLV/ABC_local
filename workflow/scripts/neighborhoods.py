@@ -261,11 +261,14 @@ def count_tss_bins(
                 outdir, f"{filebase}.{feature_name}.CountReads.bedgraph"
             )
 
-            print(f"Counting {feature_name} over TSS bins ...", flush=True)
-            run_count_reads(
-                bam, count_outfile, bins_bed_file,
-                genome_sizes, genome_sizes_bed, use_fast_count
-            )
+            if os.path.exists(count_outfile):
+                print(f"Skipping {feature_name} (bedgraph exists).", flush=True)
+            else:
+                print(f"Counting {feature_name} over TSS bins ...", flush=True)
+                run_count_reads(
+                    bam, count_outfile, bins_bed_file,
+                    genome_sizes, genome_sizes_bed, use_fast_count
+                )
 
             # Positional alignment: run_count_reads preserves input BED row order
             counts = pd.read_table(
@@ -395,7 +398,7 @@ def apply_tss_bins_qnorm(result_df, qnorm_reference_path):
     return result_df
 
 
-def make_enhancer_bins_file(enhancers, outdir, genome_sizes, chrom_sizes_map, bin_size=128, slop=10240):
+def make_enhancer_bins_file(enhancers, outdir, genome_sizes, chrom_sizes_map, bin_size=128, slop=320):
     """
     Create a BED file of fixed-size bins centered on each enhancer's midpoint.
     Bins are numbered left-to-right (bin 1 = leftmost, no strand-awareness).
@@ -443,7 +446,7 @@ def count_enhancer_bins(
     features,
     outdir,
     bin_size=128,
-    slop=10240,
+    slop=320,
     use_fast_count=True,
     qnorm_reference=None,
 ):
@@ -474,11 +477,14 @@ def count_enhancer_bins(
                 outdir, f"{filebase}.{feature_name}.CountReads.bedgraph"
             )
 
-            print(f"Counting {feature_name} over enhancer bins ...", flush=True)
-            run_count_reads(
-                bam, count_outfile, bins_bed_file,
-                genome_sizes, genome_sizes_bed, use_fast_count
-            )
+            if os.path.exists(count_outfile):
+                print(f"Skipping {feature_name} (bedgraph exists).", flush=True)
+            else:
+                print(f"Counting {feature_name} over enhancer bins ...", flush=True)
+                run_count_reads(
+                    bam, count_outfile, bins_bed_file,
+                    genome_sizes, genome_sizes_bed, use_fast_count
+                )
 
             counts = pd.read_table(
                 count_outfile, header=None,
